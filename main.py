@@ -6,12 +6,13 @@ import os
 import re
 
 # Make sure to set OPENROUTER_API_KEY in your Space's Secrets or .env file
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
-openrouter_base_url = "https://openrouter.ai/api/v1"
+openai_api_key = os.getenv("OPENROUTER_API_KEY")
+if not openai_api_key:
+    raise ValueError("OPENROUTER_API_KEY not set.")
 
 model = OpenRouterChat(
-    openai_api_key=os.environ["OPENAI_API_KEY"],
-    base_url=openrouter_base_url,
+    openai_api_key=openai_api_key,
+    base_url="https://openrouter.ai/api/v1",
     model="gryphe/mythomax-l2-13b"
 )
 
