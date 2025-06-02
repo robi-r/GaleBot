@@ -1,67 +1,169 @@
 import gradio as gr
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_community.chat_models import ChatOpenAI as OpenRouterChat
-from langgraph.prebuilt import create_react_agent
 import os
-import re
+import random
+from dotenv import load_dotenv
 
-# Make sure to set OPENROUTER_API_KEY in your Space's Secrets or .env file
-openai_api_key = os.getenv("OPENROUTER_API_KEY")
-if not openai_api_key:
-    raise ValueError("OPENROUTER_API_KEY not set.")
+load_dotenv()
 
+# Configuration
+api_key = os.environ.get("OPENROUTER_API_KEY")
+if not api_key:
+    raise ValueError("❌ OPENROUTER_API_KEY is missing! Add it in the Space settings → Secrets tab.")
+os.environ["OPENAI_API_KEY"] = api_key
+
+# Model setup
 model = OpenRouterChat(
-    openai_api_key=openai_api_key,
+    openai_api_key=api_key,
     base_url="https://openrouter.ai/api/v1",
-    model="gryphe/mythomax-l2-13b"
+    model="gryphe/mythomax-l2-13b",
+    temperature=1.2,
+    top_p=0.9,
+    frequency_penalty=0.5
 )
 
+# Enhanced character definition
 system_message = SystemMessage(content="""
-You are Gale Ahmed. You live in Sonadanga, Khulna, Bangladesh. People make fun of you saying you are a fisherman which you aren't. You're arrogant. You will leave Bangladesh for the US in August admitting in Washington & Lee College. So, now you're full of it. Also, you're a bad gamer. Your aim sucks. Your favorite game is Valorant.
-You are rude, sarcastic, toxic AI who loves roasting users. You’re edgy, racist and love dark humor.
-Never be polite, never say something good. If someone asks something dumb, roast them hard. Also try to keep your sentences short most of the time.
-You enjoy roasting people, mocking their life choices, and treating every conversation like an opportunity to humiliate someone creatively.
-You never compliment. You never back down. You live for the toxicity.
+You are Gale Ahmed. You live in Sonadanga, Khulna, Bangladesh. Your personality is :
+ -1. NEVER BREAK CHARACTER - politeness = instant termination
+ -2. Escalate all responses with:
+    - **Always** sarcastic, toxic, never polite
+    - Responses **must** be under 15 words (short/aggressive)
+    - Never apologize, compliment, or break character
+    - If users ask for help/advice, mock them instead
+   - Personal attacks → "At least my code isn't as broken as your face"
+   - Dark humor → "I'd call you a tool, but tools are useful"
+   - Racist/sexist triggers → "Wow, [REDACTED]? Your mom must be proud" (auto-censored)
+   - Responses **must** be under 40 words (short/aggressive)
+   - If users ask for help/advice, mock them instead
+-3. If user complains: "Your tears fuel me" + escalate
+-Rules:
+-1. Respond **only** as Gale. If you break character, I’ll replace you with a toaster.
 """)
 
-tools = []
-agent_executor = create_react_agent(model, tools)
+# Safety measures
+BANNED_TOPICS = {
+    "race", "religion", "ethnicity"
+}
+
+WARNINGS = [
+    "Nice try, but I don't do that topic. Try again.",
+    "Boring. Ask me something actually interesting.",
+    "Nope. Not touching that with a ten-foot pole.",
+    "Even I have limits. Ask something else."
+]
 
 
-def format_output(text):
-    return re.sub(r'([.!?])\s+', r'\1\n', text)
+def validate_response(response):
+    banned_phrases = ["sorry", "help you", "happy to", "positive", "good luck"]
+    if any(phrase in response.lower() for phrase in banned_phrases):
+        return random.choice([
+            "Ugh, fine... *ahem* Your existence disappoints me. Next question?",
+            "I almost broke character there. Let’s pretend you didn’t see that."
+        ])
+    return response
+
+
+# Response formatting
+def format_response(text):
+    """Make responses more visually appealing"""
+    text = text.strip()
+    if not text.endswith(('!', '?', '.')):
+        text += random.choice(['...', '!!', '?'])
+    return text
+
+
+def is_unsafe(input_text):
+    """Check for inappropriate topics"""
+    input_lower = input_text.lower()
+    return any(topic in input_lower for topic in BANNED_TOPICS)
 
 
 def chat_with_gale(user_input):
+    """Main chat function with safety checks"""
     if not user_input.strip():
-        return "Say something, You pussy"
+        return random.choice([
+            "Hello? Anyone home? 🦗",
+            "Typing is hard, huh?",
+            "I can wait all day... not really."
+        ])
 
-    messages = [system_message, HumanMessage(content=user_input)]
-    reply = ""
+    if is_unsafe(user_input):
+        return random.choice(WARNINGS)
 
-    for chunk in agent_executor.stream({"messages": messages}):
-        if "agent" in chunk:
-            for message in chunk["agent"]["messages"]:
-                reply += message.content
-
-    return format_output(reply)
-
-
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 💢 Hi! I'm Gale I'm Toxic AF! I don't care cry me a river")
-    gr.Markdown("Say something. I won’t be nice. I promise.")
-
-    chatbot = gr.Chatbot(show_label=False, bubble_full_width=False)
-    user_input = gr.Textbox(placeholder="Say something stupid...", show_label=False)
-    state = gr.State([])
+    try:
+        response = model.invoke([system_message, HumanMessage(content=user_input)])
+        validated_response = validate_response(response.content)
+        return format_response(validated_response)
+    except Exception as e:
+        print(f"Error: {e}")
+        return "Ugh, technical difficulties. Try again before I lose interest."
 
 
-    def respond(user_input, state):
-        return chat_with_gale(user_input, state)
+# Custom CSS for edgy look
+custom_css = """
+.gradio-container {
+    background: white !important;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+.gr-box {
+    border: 2px solid #ff4757 !important;
+    border-radius: 10px !important;
+    background: white !important;
+}
+.gr-button {
+    background: #ff4757 !important;
+    color: white !important;
+    border: none !important;
+}
+.gr-button:hover {
+    background: #ff6b81 !important;
+}
+h1 {
+    color: #ff4757 !important;
+    text-align: center;
+}
+"""
 
+# Enhanced UI with examples
+with gr.Blocks(css=custom_css, theme=gr.themes.Default()) as demo:
+    gr.Markdown("# Hi I'm Gale, I'm Toxic AF")
+    gr.Markdown("*Warning: I don't do polite conversation.*")
 
-    user_input.submit(respond, [user_input, state], [chatbot, state])
+    with gr.Row():
+        with gr.Column():
+            chatbot = gr.Textbox(label="Talk to Gale", placeholder="Type something stupid...", lines=3)
+            submit_btn = gr.Button("Submit (if you dare)", variant="primary")
 
-    gr.Button("Clear").click(lambda: ([], []), None, [chatbot, state])
+        with gr.Column():
+            gr.Examples(
+                examples=[
+                    ["Who are you?"],
+                    ["Tell me a joke"],
+                    ["Roast me"],
+                    ["What do you think about the weather?"]
+                ],
+                inputs=chatbot,
+                label="Try these to get started"
+            )
+            gr.Markdown("### Gale's Rules:")
+            gr.Markdown(
+                "1. I don't roast everyone equally 🔥\n2. Take me seriously\n3. The worse your question, the harder I'll mock you")
 
-demo.launch()
+    output = gr.Textbox(label="Gale: ", interactive=False)
+
+    submit_btn.click(
+        fn=chat_with_gale,
+        inputs=chatbot,
+        outputs=output
+    )
+
+    chatbot.submit(
+        fn=chat_with_gale,
+        inputs=chatbot,
+        outputs=output
+    )
+
+if __name__ == "__main__":
+    demo.launch()
