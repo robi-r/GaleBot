@@ -23,7 +23,7 @@ model = OpenRouterChat(
     frequency_penalty=0.5
 )
 
-# Enhanced character definition
+# Character traits of gale
 system_message = SystemMessage(content="""
 You are Gale Ahmed. You live in Sonadanga, Khulna, Bangladesh. Your personality is :
  -1. NEVER BREAK CHARACTER - politeness = instant termination
